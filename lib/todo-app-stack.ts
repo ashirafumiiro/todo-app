@@ -1,19 +1,40 @@
-import { Duration, Stack, StackProps } from 'aws-cdk-lib';
-import * as sns from 'aws-cdk-lib/aws-sns';
-import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
-import * as sqs from 'aws-cdk-lib/aws-sqs';
+import { Duration, Stack, StackProps, CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
+import * as apiGateway from 'aws-cdk-lib/aws-apigateway'
+import * as s3 from 'aws-cdk-lib/aws-s3'
+import * as s3Deployment from 'aws-cdk-lib/aws-s3-deployment'
 import { Construct } from 'constructs';
+import { TodoBackend } from './todo-backend' 
+import { SPADeploy} from 'cdk-spa-deploy'
 
 export class TodoAppStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    const queue = new sqs.Queue(this, 'TodoAppQueue', {
-      visibilityTimeout: Duration.seconds(300)
+    const todoBackent = new TodoBackend(this, 'TodoBackend', {})
+
+    new apiGateway.LambdaRestApi(this, 'Endpoint', {
+      handler: todoBackent.handler
     });
 
-    const topic = new sns.Topic(this, 'TodoAppTopic');
+    const websiteBucket = new s3.Bucket(this, "WebsiteBucket",{
+      publicReadAccess: true,
+      websiteIndexDocument: 'index.html',
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true
+    })
 
-    topic.addSubscription(new subs.SqsSubscription(queue));
+    new s3Deployment.BucketDeployment(this, 'WebDeployment', {
+      destinationBucket: websiteBucket,
+      sources: [s3Deployment.Source.asset('./assets')]
+    })
+
+    new CfnOutput(this, 'WebsiteAddress', {
+      value: websiteBucket.bucketWebsiteUrl
+    })
+
+    // new SPADeploy(this, "WebsiteDeploy").createSiteWithCloudfront({
+    //   indexDoc: 'index.html',
+    //   websiteFolder: './assets'
+    // })
   }
 }
